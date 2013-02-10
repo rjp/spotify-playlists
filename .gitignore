@@ -1,0 +1,6 @@
+*.d
+tmp
+.do_built
+libspotify.framework
+.do_built.dir
+appkey.c
