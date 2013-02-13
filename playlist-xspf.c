@@ -188,7 +188,7 @@ playlist_next(void)
     sp_playlist *next = NULL;
     do {
         fprintf(stderr, "Trying to fetch the next playlist\n");
-        next = dequeue_playlist();
+        next = dequeue_pending();
 
         if (next == NULL) {
             fprintf(stderr, "Empty queue, all playlists fully loaded, exiting.\n");
@@ -347,7 +347,7 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
         if (t == SP_PLAYLIST_TYPE_PLAYLIST) {
             fprintf(stderr, "Storing #%d [%s]\n", i, sp_playlist_name(pl));
             sp_playlist_add_ref(pl);
-            queue_playlist(pl);
+            queue_pending(pl);
             stored++;
         } else {
             fprintf(stderr, "Ignoring %d because empty or folder\n", i);
@@ -358,6 +358,7 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
     /* fire off the first N playlists to fetch - currently 1 */
     for(i=0; i<1; i++) {
         sp_playlist *first = dequeue_playlist();
+        sp_playlist *first = dequeue_pending();
         e = sp_playlist_add_callbacks(first, &pl_callbacks, (void*)0x1);
         SPE(e);
     }
@@ -390,7 +391,7 @@ static void logged_in(sp_session *sess, sp_error error)
 	}
 
     /* initialise our SLIST */
-    init_playlist_queue();
+    init_playlist_queues();
 
 	sp_playlistcontainer_add_callbacks(
 		pc,

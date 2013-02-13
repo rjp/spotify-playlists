@@ -1,3 +1,3 @@
-void init_playlist_queue(void);
-void queue_playlist(sp_playlist *);
-sp_playlist *dequeue_playlist(void);
+void init_playlist_queues(void);
+void queue_pending(sp_playlist *);
+sp_playlist *dequeue_pending(void);
