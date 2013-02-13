@@ -177,6 +177,7 @@ playlist_deinit(sp_playlist *pl) {
     fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
     kill_cb(pl);
     show_playlist(pl);
+    remove_working(pl);
     sp_playlist_release(pl);
 }
 
@@ -189,10 +190,15 @@ playlist_next(void)
         next = dequeue_pending();
 
         if (next == NULL) {
-            fprintf(stderr, "Empty queue, all playlists fully loaded, exiting.\n");
-            sleep(5);
-            sp_session_logout(g_sess);
-            exit(0);
+            if (still_working()) {
+                fprintf(stderr, "Empty pending queue, still processing\n");
+                return;
+            } else {
+                fprintf(stderr, "All queues empty, exiting\n");
+                sleep(5);
+                sp_session_logout(g_sess);
+                exit(0);
+            }
         }
 
         if (playlist_populated(next)) {
@@ -203,6 +209,7 @@ playlist_next(void)
             fprintf(stderr, "Dequeued [%s] for fetching\n", sp_playlist_name(next));
             e = sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
             SPE(e);
+            queue_working(next);
         }
     } while (next == NULL);
 }
@@ -353,11 +360,11 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
     fprintf(stderr, "stored=%d\n", stored);
 
     /* fire off the first N playlists to fetch - currently 1 */
-    for(i=0; i<1; i++) {
-        sp_playlist *first = dequeue_playlist();
+    for(i=0; i<10; i++) {
         sp_playlist *first = dequeue_pending();
         e = sp_playlist_add_callbacks(first, &pl_callbacks, (void*)0x1);
         SPE(e);
+        queue_working(first);
     }
 }
 
