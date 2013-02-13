@@ -13,7 +13,8 @@
 
 typedef SLIST_HEAD(pl_queue_t, pl_queue_entry) pl_queue;
 
-pl_queue playlists_pending;
+static pl_queue playlists_pending;
+static pl_queue playlists_working;
 
 struct pl_queue_entry {
     sp_playlist *pl; /* our queued playlist */
@@ -28,6 +29,7 @@ init_playlist_queue(pl_queue *playlist) {
 void
 init_playlist_queues() {
     init_playlist_queue(&playlists_pending);
+    init_playlist_queue(&playlists_working);
 }
 
 void
@@ -41,6 +43,11 @@ queue_playlist(sp_playlist *pl, pl_queue *playlist) {
 void
 queue_pending(sp_playlist *pl) {
     queue_playlist(pl, &playlists_pending);
+}
+
+void
+queue_working(sp_playlist *pl) {
+    queue_playlist(pl, &playlists_working);
 }
 
 sp_playlist *
@@ -67,3 +74,24 @@ sp_playlist *
 dequeue_pending(void) {
     return dequeue_playlist(&playlists_pending);
 }
+
+void
+remove_working(sp_playlist *pl) {
+    // remove this playlist from the work list somehow
+    struct pl_queue_entry *np;
+
+    SLIST_FOREACH(np, &playlists_working, entries) {
+        if (np->pl == pl) {
+            fprintf(stderr, "W-  %s\n", sp_playlist_name(np->pl));
+            SLIST_REMOVE(&playlists_working, np, pl_queue_entry, entries);
+        } else {
+            fprintf(stderr, "W=  %s\n", sp_playlist_name(np->pl));
+        }
+    }
+}
+
+int
+still_working(void) {
+    return ! SLIST_EMPTY(&playlists_working);
+}
+
