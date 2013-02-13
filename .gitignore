@@ -4,3 +4,5 @@ tmp
 libspotify.framework
 .do_built.dir
 appkey.c
+*.o
+px
