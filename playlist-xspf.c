@@ -40,6 +40,7 @@
 #include <libspotify/api.h>
 
 #include "pl-queue.h"
+#define SPE(e) if(e){fprintf(stderr, "! %s:%d %s\n", __FILE__, __LINE__, sp_error_message(e));};
 
 /* --- Data --- */
 /// The application key is specific to each project, and allows Spotify
@@ -58,6 +59,9 @@ static int g_notify_do;
 static sp_session *g_sess;
 /// Handle to the playlist currently being played
 static sp_playlist *g_jukeboxlist;
+
+// global error variable
+sp_error e;
 
 /* --------------------------  PLAYLIST CALLBACKS  ------------------------- */
 /**
