@@ -76,11 +76,7 @@ sp_error e;
 static void tracks_added(sp_playlist *pl, sp_track * const *tracks,
                          int num_tracks, int position, void *userdata)
 {
-	if (pl != g_jukeboxlist)
-		return;
-
-	printf("jukebox: %d tracks were added\n", num_tracks);
-	fflush(stdout);
+	fprintf(stderr, "[%s]: %d tracks were added\n", sp_playlist_name(pl), num_tracks);
 }
 
 /**
@@ -94,8 +90,7 @@ static void tracks_added(sp_playlist *pl, sp_track * const *tracks,
 static void tracks_removed(sp_playlist *pl, const int *tracks,
                            int num_tracks, void *userdata)
 {
-	printf("jukebox: %d tracks were removed\n", num_tracks);
-	fflush(stdout);
+	fprintf(stderr, "[%s]: %d tracks were removed\n", sp_playlist_name(pl), num_tracks);
 }
 
 /**
@@ -110,11 +105,7 @@ static void tracks_removed(sp_playlist *pl, const int *tracks,
 static void tracks_moved(sp_playlist *pl, const int *tracks,
                          int num_tracks, int new_position, void *userdata)
 {
-	if (pl != g_jukeboxlist)
-		return;
-
-	printf("jukebox: %d tracks were moved around\n", num_tracks);
-	fflush(stdout);
+	fprintf(stderr, "[%s]: %d tracks were shuffled\n", sp_playlist_name(pl), num_tracks);
 }
 
 static int count_playlists_loaded = 0;
@@ -130,7 +121,7 @@ void show_playlist(sp_playlist *pl)
     int nt = sp_playlist_num_tracks(pl);
     int j;
 
-    fprintf(stderr, "%d %s", sp_playlist_num_tracks(pl), sp_playlist_name(pl));
+    fprintf(stderr, "%d %s\n", sp_playlist_num_tracks(pl), sp_playlist_name(pl));
     
     for(j=0; j<nt; j++) {
         sp_track *st = sp_playlist_track(pl, j);
@@ -148,7 +139,7 @@ void show_playlist(sp_playlist *pl)
                 sp_link_as_string(a_sl, album_uri, 1024);
                 sp_link_release(a_sl);
             }
-            fprintf(stderr, "  #%d %s %s\n", j+1, track_uri, album_uri);
+            fprintf(stderr, "  #%d %s %s %s\n", j+1, playlist_uri, track_uri, album_uri);
             /* if we've not seen this album before, queue up a metadata search */
             // sp_track_release(st);
         }
@@ -196,11 +187,12 @@ static void playlist_metadata(sp_playlist *pl, void *userdata)
                 exit(0);
             }
             fprintf(stderr, "Dequeued [%s] for fetching\n", sp_playlist_name(next));
-            sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
+            e = sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
+            SPE(e);
         }
 
     } else {
-        fprintf(stderr, "%d/%d %s\n", loaded, nt, sp_playlist_name(pl));
+        fprintf(stderr, "Loading: %s\n", sp_playlist_name(pl));
     }
 }
 
@@ -217,8 +209,10 @@ static sp_playlist_callbacks md_callbacks = {
 
 static void playlist_state_changed(sp_playlist *pl, void *userdata)
 {
+    fprintf(stderr, "PSC %p %s\n", userdata, sp_playlist_name(pl));
     if (userdata != 0) {
         sp_link *spl = sp_link_create_from_playlist(pl);
+        fprintf(stderr, "PSC/L %p\n", spl);
         if (spl) { /* successful link creation = loaded the playlist */
             int pi;
 
@@ -341,7 +335,8 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
     /* fire off the first N playlists to fetch - currently 1 */
     for(i=0; i<1; i++) {
         sp_playlist *first = dequeue_playlist();
-        sp_playlist_add_callbacks(first, &pl_callbacks, 0x1);
+        e = sp_playlist_add_callbacks(first, &pl_callbacks, (void*)0x1);
+        SPE(e);
     }
 }
 
