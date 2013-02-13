@@ -57,8 +57,6 @@ static pthread_cond_t g_notify_cond;
 static int g_notify_do;
 /// The global session handle
 static sp_session *g_sess;
-/// Handle to the playlist currently being played
-static sp_playlist *g_jukeboxlist;
 
 // global error variable
 sp_error e;
@@ -333,7 +331,6 @@ static void playlist_removed(sp_playlistcontainer *pc, sp_playlist *pl,
 static void container_loaded(sp_playlistcontainer *pc, void *userdata)
 {
     int i;
-    int indent = 0;
 
 	fprintf(stderr, "jukebox: Rootlist synchronized (%d playlists)\n",
 	    sp_playlistcontainer_num_playlists(pc));
