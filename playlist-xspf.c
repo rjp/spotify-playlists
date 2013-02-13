@@ -120,6 +120,10 @@ void show_playlist(sp_playlist *pl)
 {
     int nt = sp_playlist_num_tracks(pl);
     int j;
+    sp_link *pl_link = sp_link_create_from_playlist(pl);
+    char playlist_uri[1024];
+    sp_link_as_string(pl_link, playlist_uri, 1024);
+    sp_link_release(pl_link);
 
     fprintf(stderr, "%d %s\n", sp_playlist_num_tracks(pl), sp_playlist_name(pl));
     
@@ -144,26 +148,19 @@ void show_playlist(sp_playlist *pl)
             // sp_track_release(st);
         }
     }
-    count_playlists_shown--;
+    count_playlists_shown++;
     fprintf(stderr, "%d/%d playlists unshown\n", count_playlists_shown, cp_original);
-    if (count_playlists_shown == 0) {
-        fprintf(stderr, "THEORETICALLY WE'RE FINISHED\n");
-        sleep(30);
-        sp_session_logout(g_sess);
-        exit(0);
-    }
-    sp_playlist_release(pl);
 }
 
 /* forward reference */
 static sp_playlist_callbacks pl_callbacks;
+static sp_playlist_callbacks md_callbacks;
 
-static void playlist_metadata(sp_playlist *pl, void *userdata)
+int
+playlist_populated(sp_playlist *pl)
 {
     int i, nt = sp_playlist_num_tracks(pl);
     int loaded = 0;
-
-    fprintf(stderr, "PM %p\n", pl);
 
     for(i=0; i<nt; i++) {
         sp_track *st = sp_playlist_track(pl, i);
@@ -172,25 +169,51 @@ static void playlist_metadata(sp_playlist *pl, void *userdata)
             loaded++;
         }
     }
-    if (loaded == nt) {
-        fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
-        kill_cb(pl);
-        show_playlist(pl);
+    fprintf(stderr, "%% %d/%d %s\n", loaded, nt, sp_playlist_name(pl));
 
-        // take next playlist off queue and add callbacks
-        {
-            sp_playlist *next = dequeue_playlist();
-            if (next == NULL) {
-                fprintf(stderr, "Empty queue, all playlists fully loaded, exiting.\n");
-                sleep(5);
-                sp_session_logout(g_sess);
-                exit(0);
-            }
+    return loaded == nt;
+}
+
+void
+playlist_deinit(sp_playlist *pl) {
+    fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
+    kill_cb(pl);
+    show_playlist(pl);
+    sp_playlist_release(pl);
+}
+
+void
+playlist_next(void)
+{
+    sp_playlist *next = NULL;
+    do {
+        fprintf(stderr, "Trying to fetch the next playlist\n");
+        next = dequeue_playlist();
+
+        if (next == NULL) {
+            fprintf(stderr, "Empty queue, all playlists fully loaded, exiting.\n");
+            sleep(5);
+            sp_session_logout(g_sess);
+            exit(0);
+        }
+
+        if (playlist_populated(next)) {
+            fprintf(stderr, "FULL [%s], skipping\n", sp_playlist_name(next));
+            playlist_deinit(next);
+            next = NULL;
+        } else {
             fprintf(stderr, "Dequeued [%s] for fetching\n", sp_playlist_name(next));
             e = sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
             SPE(e);
         }
+    } while (next == NULL);
+}
 
+static void playlist_metadata(sp_playlist *pl, void *userdata)
+{
+    if (playlist_populated(pl)) {
+        playlist_deinit(pl);
+        playlist_next();
     } else {
         fprintf(stderr, "Loading: %s\n", sp_playlist_name(pl));
     }
@@ -228,19 +251,18 @@ static void playlist_state_changed(sp_playlist *pl, void *userdata)
             sp_playlist_add_callbacks(pl, &md_callbacks, (void*)0x2);
 
             {
-                sp_track *st;
                 int k;
 
-                for(k=0; k<sp_playlist_num_tracks(pl); k++) {
-                    st = sp_playlist_track(pl, k);
-                    sp_track_add_ref(st);
+                if(playlist_populated(pl)) {
+                    playlist_deinit(pl);
+                    playlist_next();
+                } else {
+                    for(k=0; k<sp_playlist_num_tracks(pl); k++) {
+                        sp_track *st = sp_playlist_track(pl, k);
+                        fprintf(stderr, "T %d/%p %d %s\n", k, st, sp_track_error(st), sp_playlist_name(pl));
+                    }
                 }
             }
-
-            count_playlists_loaded--;
-            if (count_playlists_loaded == 0) {
-               fprintf(stderr, "ALL PLAYLISTS LOADED!\n");
-            } 
         }
         else {
             fprintf(stderr, "?P %p\n", pl);
@@ -324,6 +346,7 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
 
         if (t == SP_PLAYLIST_TYPE_PLAYLIST) {
             fprintf(stderr, "Storing #%d [%s]\n", i, sp_playlist_name(pl));
+            sp_playlist_add_ref(pl);
             queue_playlist(pl);
             stored++;
         } else {
