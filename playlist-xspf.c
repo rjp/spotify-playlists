@@ -39,6 +39,8 @@
 
 #include <libspotify/api.h>
 
+#include "pl-queue.h"
+
 /* --- Data --- */
 /// The application key is specific to each project, and allows Spotify
 /// to produce statistics on how our service is used.
@@ -158,6 +160,9 @@ void show_playlist(sp_playlist *pl)
     sp_playlist_release(pl);
 }
 
+/* forward reference */
+static sp_playlist_callbacks pl_callbacks;
+
 static void playlist_metadata(sp_playlist *pl, void *userdata)
 {
     int i, nt = sp_playlist_num_tracks(pl);
@@ -176,25 +181,52 @@ static void playlist_metadata(sp_playlist *pl, void *userdata)
         fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
         kill_cb(pl);
         show_playlist(pl);
+
+        // take next playlist off queue and add callbacks
+        {
+            sp_playlist *next = dequeue_playlist();
+            if (next == NULL) {
+                fprintf(stderr, "Empty queue, all playlists fully loaded, exiting.\n");
+                sleep(5);
+                sp_session_logout(g_sess);
+                exit(0);
+            }
+            fprintf(stderr, "Dequeued [%s] for fetching\n", sp_playlist_name(next));
+            sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
+        }
+
     } else {
         fprintf(stderr, "%d/%d %s\n", loaded, nt, sp_playlist_name(pl));
     }
 }
 
+struct xx {
+    sp_playlist *pl;
+    int tagged;
+    int userdata;
+} playlists[1024];
+int stored = 0;
+
 static sp_playlist_callbacks md_callbacks = {
     .playlist_metadata_updated = &playlist_metadata,
 };
+
 static void playlist_state_changed(sp_playlist *pl, void *userdata)
 {
     if (userdata != 0) {
         sp_link *spl = sp_link_create_from_playlist(pl);
         if (spl) { /* successful link creation = loaded the playlist */
+            int pi;
+
             sp_link_release(spl);
             fprintf(stderr, "+P u=%p %s (%d) %d\n", userdata, sp_playlist_name(pl), sp_playlist_num_tracks(pl), count_playlists_loaded);
 
             sp_playlist_add_ref(pl);
             kill_cb(pl);
 
+            // add playlist to end of queue without callbacks
+            fprintf(stderr, "metadata callback #%d [%s] to the queue\n", pi, sp_playlist_name(pl));
+            // when the queue is N long, process the head of the queue
             sp_playlist_add_callbacks(pl, &md_callbacks, (void*)0x2);
 
             {
@@ -285,22 +317,28 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
 
 	fprintf(stderr, "jukebox: Rootlist synchronized (%d playlists)\n",
 	    sp_playlistcontainer_num_playlists(pc));
-    count_playlists_loaded = 5; // sp_playlistcontainer_num_playlists(pc);
+    count_playlists_loaded = sp_playlistcontainer_num_playlists(pc);
 
     /* now we can write them all out to xspf */
-	for (i = 0; i < 5; ++i) {
+	for (i = 0; i < count_playlists_loaded; ++i) {
 		sp_playlist *pl = sp_playlistcontainer_playlist(pc, i);
         sp_playlist_type t = sp_playlistcontainer_playlist_type(pc, i);
+
         if (t == SP_PLAYLIST_TYPE_PLAYLIST) {
-            fprintf(stderr, "Callback for [%d]\n", i);
-            sp_playlist_add_callbacks(pl, &pl_callbacks, (void*)0x1);
+            fprintf(stderr, "Storing #%d [%s]\n", i, sp_playlist_name(pl));
+            queue_playlist(pl);
+            stored++;
         } else {
             fprintf(stderr, "Ignoring %d because empty or folder\n", i);
-            count_playlists_loaded--;
         }
     }
-    count_playlists_shown = count_playlists_loaded;
-    cp_original = count_playlists_loaded;
+    fprintf(stderr, "stored=%d\n", stored);
+
+    /* fire off the first N playlists to fetch - currently 1 */
+    for(i=0; i<1; i++) {
+        sp_playlist *first = dequeue_playlist();
+        sp_playlist_add_callbacks(first, &pl_callbacks, 0x1);
+    }
 }
 
 /**
@@ -328,6 +366,9 @@ static void logged_in(sp_session *sess, sp_error error)
 			sp_error_message(error));
 		exit(2);
 	}
+
+    /* initialise our SLIST */
+    init_playlist_queue();
 
 	sp_playlistcontainer_add_callbacks(
 		pc,
