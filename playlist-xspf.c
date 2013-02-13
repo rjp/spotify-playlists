@@ -127,9 +127,11 @@ void show_playlist(sp_playlist *pl)
     
     for(j=0; j<nt; j++) {
         sp_track *st = sp_playlist_track(pl, j);
+        int i, na = sp_track_num_artists(st);
 
         if (st && sp_track_is_loaded(st)) {
             char track_uri[1024], album_uri[1024];
+            char artist_uri[64][1024];
             {
                 sp_link *t_sl = sp_link_create_from_track(st, 0);
                 sp_link_as_string(t_sl, track_uri, 1024);
@@ -141,9 +143,19 @@ void show_playlist(sp_playlist *pl)
                 sp_link_as_string(a_sl, album_uri, 1024);
                 sp_link_release(a_sl);
             }
-            fprintf(stderr, "  #%d %s %s %s\n", j+1, playlist_uri, track_uri, album_uri);
-            /* if we've not seen this album before, queue up a metadata search */
-            // sp_track_release(st);
+            {
+                int i;
+                for(i=0; i<na; i++) {
+                    sp_link *l_artist = sp_link_create_from_artist(sp_track_artist(st, i));
+                    sp_link_as_string(l_artist, artist_uri[i], 1024);
+                    sp_link_release(l_artist);
+                }
+            }
+            fprintf(stderr, "  #%d %s %s %s", j+1, playlist_uri, track_uri, album_uri);
+            for(i=0; i<na; i++) {
+                fprintf(stderr, " %s", artist_uri[i]);
+            }
+            fprintf(stderr, "\n");
         }
     }
     count_playlists_shown++;
