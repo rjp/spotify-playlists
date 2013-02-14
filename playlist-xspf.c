@@ -107,7 +107,7 @@ static void tracks_moved(sp_playlist *pl, const int *tracks,
 }
 
 static int count_playlists_loaded = 0;
-static int count_playlists_shown  = 0, cp_original = 0;
+static int count_playlists_shown  = 0;
 
 /* forward reference */
 void kill_cb(sp_playlist *pl);
@@ -122,44 +122,73 @@ void show_playlist(sp_playlist *pl)
     char playlist_uri[1024];
     sp_link_as_string(pl_link, playlist_uri, 1024);
     sp_link_release(pl_link);
+    sp_user *pl_user = sp_playlist_owner(pl);
 
-    fprintf(stderr, "%d %s\n", sp_playlist_num_tracks(pl), sp_playlist_name(pl));
+    if (!pl_user) {
+        fprintf(stderr, "There is no owner of this playlist?\n");
+        exit(1);
+    }
+
+    printf("PLAYLIST %p %d %s\n", pl, sp_playlist_num_tracks(pl), sp_playlist_name(pl));
+    printf("OWNER %p %s\n", pl, sp_user_canonical_name(pl_user));
+
+    {
+        const char *desc = sp_playlist_get_description(pl);
+        if (desc) {
+            printf("DESCRIPTION %p %s\n", pl, desc);
+        }
+    }
     
     for(j=0; j<nt; j++) {
         sp_track *st = sp_playlist_track(pl, j);
-        int i, na = sp_track_num_artists(st);
+        int na = sp_track_num_artists(st);
 
         if (st && sp_track_is_loaded(st)) {
-            char track_uri[1024], album_uri[1024];
-            char artist_uri[64][1024];
             {
+                sp_user *user = sp_playlist_track_creator(pl, j);
+                if (!user) {
+                    printf("TRACK:CREATOR %p %d %s\n", pl, j, sp_user_canonical_name(pl_user));
+                } else {
+                    printf("TRACK:CREATOR %p %d %s\n", pl, j, sp_user_canonical_name(user));
+                }
+            }
+            {
+                char track_uri[1024];
                 sp_link *t_sl = sp_link_create_from_track(st, 0);
                 sp_link_as_string(t_sl, track_uri, 1024);
                 sp_link_release(t_sl);
+                printf("TRACK:URI %p %d %s\n", pl, j, track_uri);
+                printf("TRACK:NAME %p %d %s\n", pl, j, sp_track_name(st));
+                printf("TRACK:DURATION %p %d %d\n", pl, j, sp_track_duration(st));
+                printf("TRACK:EPOCH %p %d %d\n", pl, j, sp_playlist_track_create_time(pl, j));
             }
             {
+                char album_uri[1024];
                 sp_album *sa = sp_track_album(st);
                 sp_link *a_sl = sp_link_create_from_album(sa);
                 sp_link_as_string(a_sl, album_uri, 1024);
                 sp_link_release(a_sl);
+                printf("ALBUM:URI %p %d %s\n", pl, j, album_uri);
+                printf("ALBUM:NAME %p %d %s\n", pl, j, sp_album_name(sa));
             }
             {
                 int i;
                 for(i=0; i<na; i++) {
-                    sp_link *l_artist = sp_link_create_from_artist(sp_track_artist(st, i));
-                    sp_link_as_string(l_artist, artist_uri[i], 1024);
+                    char artist_uri[1024];
+                    sp_artist *artist = sp_track_artist(st, i);
+                    sp_link *l_artist = sp_link_create_from_artist(artist);
+                    sp_link_as_string(l_artist, artist_uri, 1024);
                     sp_link_release(l_artist);
+                    printf("ARTIST:URI %p %d %d %s\n", pl, j, i, artist_uri);
+                    printf("ARTIST:NAME %p %d %d %s\n", pl, j, i, sp_artist_name(artist));
                 }
             }
-            fprintf(stderr, "  #%d %s %s %s", j+1, playlist_uri, track_uri, album_uri);
-            for(i=0; i<na; i++) {
-                fprintf(stderr, " %s", artist_uri[i]);
-            }
-            fprintf(stderr, "\n");
+            printf("TRACK:END %p %d\n", pl, j);
         }
     }
+    printf("PLAYLIST:END %p\n", pl);
     count_playlists_shown++;
-    fprintf(stderr, "%d/%d playlists unshown\n", count_playlists_shown, cp_original);
+    fprintf(stderr, "%d playlists shown\n", count_playlists_shown);
 }
 
 /* forward reference */
