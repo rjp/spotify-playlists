@@ -5,7 +5,7 @@ redo-ifchange $DEPS
 
 case "$(uname)" in
     *Darwin*) LIBS="-framework libspotify" ;;
-    *) LIBS="-llibspotify" ;;
+    *) LIBS="-L/usr/local/lib -lspotify" ;;
 esac
 
-${CC} -o px $DEPS -g -Wall $LIBS
+${CC} -o $3 $DEPS -g -Wall $LIBS
