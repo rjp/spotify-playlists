@@ -95,3 +95,61 @@ still_working(void) {
     return ! SLIST_EMPTY(&playlists_working);
 }
 
+int
+still_pending(void) {
+    return ! SLIST_EMPTY(&playlists_pending);
+}
+
+int
+deinit_finished_working(int(*seek)(sp_playlist*),void(*destroy)(sp_playlist*)) {
+    struct pl_queue_entry *np;
+    int rv = 0;
+
+    SLIST_FOREACH(np, &playlists_working, entries) {
+        if ((*seek)(np->pl)) { // remove from working
+            fprintf(stderr, "W!  %s\n", sp_playlist_name(np->pl));
+            (*destroy)(np->pl);
+            rv = 1; /* we've removed a playlist => free slot */
+        } else {
+            fprintf(stderr, "W?  %s\n", sp_playlist_name(np->pl));
+        }
+    }
+
+    return rv;
+}
+
+void
+print_working(char *prefix)
+{
+    struct pl_queue_entry *np;
+    int i=0;
+
+    if (SLIST_EMPTY(&playlists_working)) {
+        fprintf(stderr, "Q. %s EMPTY\n", prefix);
+        return;
+    }
+
+    SLIST_FOREACH(np, &playlists_working, entries) {
+        fprintf(stderr, "Q. %s %d %p %s\n", prefix, i, np->pl,
+                np->pl ? sp_playlist_name(np->pl) : "[NULL]");
+        i++;
+    }
+}
+
+void
+print_pending(char *prefix)
+{
+    struct pl_queue_entry *np;
+    int i=0;
+
+    if (SLIST_EMPTY(&playlists_pending)) {
+        fprintf(stderr, "Q. %s EMPTY\n", prefix);
+        return;
+    }
+
+    SLIST_FOREACH(np, &playlists_pending, entries) {
+        fprintf(stderr, "Q. %s %d %p %s\n", prefix, i, np->pl,
+                np->pl ? sp_playlist_name(np->pl) : "[NULL]");
+        i++;
+    }
+}

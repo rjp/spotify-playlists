@@ -58,6 +58,9 @@ static int g_notify_do;
 /// The global session handle
 static sp_session *g_sess;
 
+static pthread_mutex_t g_working_mutex;
+static pthread_t g_working_scanner;
+
 // global error variable
 sp_error e;
 
@@ -111,15 +114,22 @@ static int count_playlists_shown  = 0;
 
 /* forward reference */
 void kill_cb(sp_playlist *pl);
+void kill_md(sp_playlist *pl);
 sp_playlistcontainer *g_pc;
 static void notify_main_thread(sp_session *sess);
 
-void show_playlist(sp_playlist *pl)
+int show_playlist(sp_playlist *pl)
 {
     int nt = sp_playlist_num_tracks(pl);
     int j;
     sp_link *pl_link = sp_link_create_from_playlist(pl);
     char playlist_uri[1024];
+
+    if (pl_link == NULL) {
+        fprintf(stderr, "pl_link is NULL, something has gone wrong.\n");
+        return 0;
+    }
+
     sp_link_as_string(pl_link, playlist_uri, 1024);
     sp_link_release(pl_link);
     sp_user *pl_user = sp_playlist_owner(pl);
@@ -189,6 +199,8 @@ void show_playlist(sp_playlist *pl)
     printf("PLAYLIST:END %p\n", pl);
     count_playlists_shown++;
     fprintf(stderr, "%d playlists shown\n", count_playlists_shown);
+
+    return 1;
 }
 
 /* forward reference */
@@ -206,20 +218,36 @@ playlist_populated(sp_playlist *pl)
 
         if (st && sp_track_error(st) == SP_ERROR_OK) {
             loaded++;
+        } else {
+            const char *x = st ? sp_track_name(st) : "[NULL]";
+            fprintf(stderr, "%%! %d/%d %s\n", i, nt, x);
         }
     }
     fprintf(stderr, "%% %d/%d %s\n", loaded, nt, sp_playlist_name(pl));
 
-    return loaded == nt;
+    return nt == loaded;
 }
 
 void
 playlist_deinit(sp_playlist *pl) {
-    fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
-    kill_cb(pl);
-    show_playlist(pl);
-    remove_working(pl);
-    sp_playlist_release(pl);
+    if (show_playlist(pl)) {
+        fprintf(stderr, "FULL %s\n", sp_playlist_name(pl));
+        kill_cb(pl);
+        kill_md(pl);
+        remove_working(pl);
+        sp_playlist_release(pl);
+    } else {
+        fprintf(stderr, "ERROR in show, leaving on pending list\n");
+    }
+}
+
+void
+finished_working(void)
+{
+    fprintf(stderr, "All queues empty, exiting\n");
+    sleep(5);
+    sp_session_logout(g_sess);
+    exit(0);
 }
 
 void
@@ -235,19 +263,16 @@ playlist_next(void)
                 fprintf(stderr, "Empty pending queue, still processing\n");
                 return;
             } else {
-                fprintf(stderr, "All queues empty, exiting\n");
-                sleep(5);
-                sp_session_logout(g_sess);
-                exit(0);
+                finished_working();
             }
         }
 
         if (playlist_populated(next)) {
-            fprintf(stderr, "FULL [%s], skipping\n", sp_playlist_name(next));
+            fprintf(stderr, "Dequeue-skip [%s]\n", sp_playlist_name(next));
             playlist_deinit(next);
             next = NULL;
         } else {
-            fprintf(stderr, "Dequeued [%s] for fetching\n", sp_playlist_name(next));
+            fprintf(stderr, "Dequeue-fetch [%s]\n", sp_playlist_name(next));
             e = sp_playlist_add_callbacks(next, &pl_callbacks, (void*)0x1);
             SPE(e);
             queue_working(next);
@@ -283,8 +308,6 @@ static void playlist_state_changed(sp_playlist *pl, void *userdata)
         sp_link *spl = sp_link_create_from_playlist(pl);
         fprintf(stderr, "PSC/L %p\n", spl);
         if (spl) { /* successful link creation = loaded the playlist */
-            int pi;
-
             sp_link_release(spl);
             fprintf(stderr, "+P u=%p %s (%d) %d\n", userdata, sp_playlist_name(pl), sp_playlist_num_tracks(pl), count_playlists_loaded);
 
@@ -292,7 +315,7 @@ static void playlist_state_changed(sp_playlist *pl, void *userdata)
             kill_cb(pl);
 
             // add playlist to end of queue without callbacks
-            fprintf(stderr, "metadata callback #%d [%s] to the queue\n", pi, sp_playlist_name(pl));
+            fprintf(stderr, "metadata callback [%s] to the queue\n", sp_playlist_name(pl));
             // when the queue is N long, process the head of the queue
             sp_playlist_add_callbacks(pl, &md_callbacks, (void*)0x2);
 
@@ -332,6 +355,10 @@ static sp_playlist_callbacks pl_callbacks = {
 
 void kill_cb(sp_playlist *pl) {
      sp_playlist_remove_callbacks(pl, &pl_callbacks, (void*)0x1);
+}
+
+void kill_md(sp_playlist *pl) {
+     sp_playlist_remove_callbacks(pl, &md_callbacks, (void*)0x2);
 }
 
 
@@ -390,7 +417,7 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
         sp_playlist_type t = sp_playlistcontainer_playlist_type(pc, i);
 
         if (t == SP_PLAYLIST_TYPE_PLAYLIST) {
-            fprintf(stderr, "Storing #%d [%s]\n", i, sp_playlist_name(pl));
+            fprintf(stderr, "Storing #%d [%s] %d\n", i, sp_playlist_name(pl), t);
             sp_playlist_add_ref(pl);
             queue_pending(pl);
             stored++;
@@ -502,6 +529,33 @@ static void usage(const char *progname)
 	fprintf(stderr, "warning: -d will delete the tracks played from the list!\n");
 }
 
+void *
+scan_working(void *junk)
+{
+    while (1) {
+        fprintf(stderr, "QW working queue cleaner running\n");
+        pthread_mutex_lock(&g_working_mutex);
+        if (deinit_finished_working(playlist_populated, playlist_deinit)) {
+            playlist_next();
+        }
+        pthread_mutex_unlock(&g_working_mutex);
+        fprintf(stderr, "QW working queue cleaner sleeping\n");
+        sleep(20);
+
+//        fprintf(stderr, "QP pending queue cleaner running\n");
+//        playlist_next();
+
+        fprintf(stderr, "Q? p=%d w=%d\n", still_pending(), still_working());
+        if (!still_pending() && !still_working()) {
+            finished_working();
+        } else {
+            print_pending("P!");
+            print_working("W!");
+        }
+        sleep(5);
+    }
+}
+
 int main(int argc, char **argv)
 {
 	sp_session *sp;
@@ -546,7 +600,10 @@ int main(int argc, char **argv)
 	g_sess = sp;
 
 	pthread_mutex_init(&g_notify_mutex, NULL);
-	pthread_cond_init(&g_notify_cond, NULL);
+    pthread_cond_init(&g_notify_cond, NULL);
+
+    pthread_mutex_init(&g_working_mutex, NULL);
+    pthread_create(&g_working_scanner, NULL, scan_working, NULL);
 
 	sp_session_login(sp, username, password, 0, NULL);
 	pthread_mutex_lock(&g_notify_mutex);
