@@ -17,7 +17,7 @@ end
 c = 0
 
 $stdin.readlines.each do |line|
-    tag, ref, *stuff = line.chomp.split(' ')
+    tag, ref, *stuff = line.force_encoding('utf-8').chomp.split(' ')
     t = tracks[ref] # current tracklist
     i = stuff[0].to_i
     case tag
@@ -31,6 +31,7 @@ $stdin.readlines.each do |line|
                 f.write p.to_xml
             end
             c = c + 1
+            print "Written #{c} #{p.title}"
         when 'OWNER' then
             p.creator = stuff[0]
         when 'TRACK:CREATOR' then 
@@ -63,6 +64,3 @@ $stdin.readlines.each do |line|
             p.tracklist << x
     end
 end
-
-b = blobs.keys.first
-puts blobs[b].to_xml
