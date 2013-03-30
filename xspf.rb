@@ -31,7 +31,7 @@ $stdin.readlines.each do |line|
                 f.write p.to_xml
             end
             c = c + 1
-            print "Written #{c} #{p.title}"
+            puts "Written #{c} #{p.title}"
         when 'OWNER' then
             p.creator = stuff[0]
         when 'TRACK:CREATOR' then 
