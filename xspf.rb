@@ -7,7 +7,8 @@ t = nil
 q = nil
 metas = nil
 
-# xspf blindly passes unescaped strings to eval in single quotes. Because ... yes. Why not.
+# xspf blindly passes unescaped strings to eval in single quotes.
+# Because ... yes. Why not.
 class String
   def sq
     self.gsub(/'/, "\\\\'")

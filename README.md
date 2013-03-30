@@ -8,13 +8,20 @@ You need a
 [Spotify Developer](https://developer.spotify.com/technologies/libspotify/)
 application key in C format in appkey.c.
 
-### BSD queue functions
+### libspotify
 
-Present on Linux and OS X.
+Grab the appropriate version of libspotify from [Spofity Developer download](http://developer.spotify.com/technologies/libspotify/#download).
 
 ### Ruby 1.9 + xspf gem
 
+If you want to convert the raw output to XSPF files, you'll need the XSPF module.
+
     gem install xspf
+
+### Others
+
+* __BSD Queue functions__: Core on Linux and OS X.
+* __pthreads__: Core on Linux and OS X.
 
 ## Building
 
