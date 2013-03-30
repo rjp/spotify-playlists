@@ -4,3 +4,4 @@ if [ -e .do_built ]; then
 	done <.do_built
 fi
 [ -z "$DO_BUILT" ] && rm -rf .do_built .do_built.dir
+rm -f *.o px
