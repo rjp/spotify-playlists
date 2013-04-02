@@ -25,11 +25,13 @@ If you want to convert the raw output to XSPF files, you'll need the XSPF module
 
 ## Building
 
-    redo clean px
+    redo clean all
 
 If you don't have `redo` installed, the minimal alternative `mdo` is included.
 
-    ./mdo clean px
+    ./mdo clean all
+
+That should create the `px` binary.
 
 ## Running
 
