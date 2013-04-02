@@ -54,3 +54,4 @@ Only tracks have URIs.  The XSPF format has no canonical identifier for
 albums or artists.  They could be shoved in extension, link, or meta elements
 but Ruby xspf (as of 0.4) doesn't handle these correctly.
 
+Sometimes libspotify seems to ignore a single (new?) playlist.  Investigations are ongoing.  Often picked up on the next run.
