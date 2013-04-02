@@ -6,3 +6,4 @@ libspotify.framework
 appkey.c
 *.o
 px
+.redo
