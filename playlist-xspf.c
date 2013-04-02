@@ -417,9 +417,18 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
         sp_playlist_type t = sp_playlistcontainer_playlist_type(pc, i);
 
         if (t == SP_PLAYLIST_TYPE_PLAYLIST) {
-            fprintf(stderr, "Storing #%d [%s] %d\n", i, sp_playlist_name(pl), t);
+            const char *name = sp_playlist_name(pl);
+            if (strlen(name) == 0) {
+                name = NULL;
+            }
+            fprintf(stderr, "Storing #%d [%s] %d\n", i, name?name:"<NULL>", t);
             sp_playlist_add_ref(pl);
-            queue_pending(pl);
+            if (name == NULL) { // not loaded, prioritise
+                fprintf(stderr, "Prioritising %d, not loaded\n", i);
+                queue_pending_first(pl);
+            } else {
+                queue_pending(pl);
+            }
             stored++;
         } else {
             fprintf(stderr, "Ignoring %d because empty or folder\n", i);
@@ -428,7 +437,7 @@ static void container_loaded(sp_playlistcontainer *pc, void *userdata)
     fprintf(stderr, "stored=%d\n", stored);
 
     /* fire off the first N playlists to fetch - currently 1 */
-    for(i=0; i<10; i++) {
+    for(i=0; i<20; i++) {
         sp_playlist *first = dequeue_pending();
         e = sp_playlist_add_callbacks(first, &pl_callbacks, (void*)0x1);
         SPE(e);
